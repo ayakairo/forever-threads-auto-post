@@ -1,0 +1,33 @@
+name: Threadsトークン自動更新
+
+on:
+  schedule:
+    - cron: '0 0 1,15 * *'  # 毎月1日・15日 09:00 JST（60日で切れるので余裕をもって月2回）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: トークンを更新してSecretsに登録
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          TOKEN_OUT: ${{ runner.temp }}/threads_token
+          GH_TOKEN: ${{ secrets.MAIN_REPO_TOKEN }}
+        run: |
+          python refresh_token.py
+          gh secret set THREADS_ACCESS_TOKEN --repo "$GITHUB_REPOSITORY" < "$TOKEN_OUT"
+          rm -f "$TOKEN_OUT"
