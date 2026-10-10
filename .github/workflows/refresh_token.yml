@@ -31,3 +31,30 @@ jobs:
           python refresh_token.py
           gh secret set THREADS_ACCESS_TOKEN --repo "$GITHUB_REPOSITORY" < "$TOKEN_OUT"
           rm -f "$TOKEN_OUT"
+
+      - name: エラー通知 (Chatwork)
+        if: failure()
+        env:
+          CHATWORK_API_TOKEN: ${{ secrets.CHATWORK_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 << 'EOF'
+          import os, urllib.request, urllib.parse
+
+          token = os.environ.get('CHATWORK_API_TOKEN', '')
+          run_url = os.environ.get('RUN_URL', '')
+          if not token:
+              print('Chatwork token not set, skip notification')
+              exit()
+
+          msg = f"""【フォーエバーThreads自動投稿】トークンの自動更新に失敗しました（放置すると60日で投稿が止まります）\n\nログURL: {run_url}\n\nこのメッセージをそのままClaudeに投げると診断・修正してくれます。"""
+
+          data = urllib.parse.urlencode({'body': msg}).encode()
+          req = urllib.request.Request(
+              'https://api.chatwork.com/v2/rooms/229193178/messages',
+              data=data,
+              headers={'X-ChatworkToken': token}
+          )
+          urllib.request.urlopen(req)
+          print('エラー通知をChatworkに送信しました')
+          EOF

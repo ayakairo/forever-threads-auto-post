@@ -51,3 +51,65 @@ jobs:
             echo "push failed (attempt $i), retrying after rebase..."
             sleep $((RANDOM % 5 + 1))
           done
+
+      - name: Check stock and notify if low
+        # 昼(12:00 JST)の実行時だけ通知する。全実行で鳴らすと1日2回のスパムになる。
+        if: always() && github.event.schedule == '0 3 * * *'
+        env:
+          CHATWORK_API_TOKEN: ${{ secrets.CHATWORK_API_TOKEN }}
+          POSTS_FILE: ${{ github.workspace }}/ayaka-main/in_フォーエバー/Threads/投稿ストック.md
+        run: |
+          python3 << 'EOF'
+          import os, urllib.request, urllib.parse
+          import post
+
+          posts = post.parse_stock(post.POSTS_FILE.read_text(encoding='utf-8'))
+          pending = [p for p in posts if not p['done'] and p['parts']]
+          short = sum(1 for p in pending if not p['long'])
+          long_ = sum(1 for p in pending if p['long'])
+          print(f'残りストック: 短文{short}本 / 長文{long_}本')
+
+          # 短文が1週間分(14本＝1日2本)を切るか、長文が残り1本以下になったら通知。
+          # これは補充トリガーではなく「週次補充が飛んだ」ことを検知するセーフティネット。
+          if short <= 14 or long_ <= 1:
+              token = os.environ.get('CHATWORK_API_TOKEN', '')
+              if not token:
+                  print('Chatwork token not set, skip notification')
+                  exit()
+              msg = f'【フォーエバーThreads自動投稿】残りストック: 短文{short}本（約{short // 2}日分）／長文{long_}本（日曜夜・週1）。\n\nClaudeに「Threads補充して」と言うと作ります。\nin_フォーエバー/Threads/投稿ストック.md に追加後、必ず git push origin main まで実行してください。'
+              data = urllib.parse.urlencode({'body': msg}).encode()
+              req = urllib.request.Request(
+                  'https://api.chatwork.com/v2/rooms/229193178/messages',
+                  data=data,
+                  headers={'X-ChatworkToken': token}
+              )
+              urllib.request.urlopen(req)
+              print('Chatworkのマイチャットに通知しました')
+          EOF
+
+      - name: エラー通知 (Chatwork)
+        if: failure()
+        env:
+          CHATWORK_API_TOKEN: ${{ secrets.CHATWORK_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 << 'EOF'
+          import os, urllib.request, urllib.parse
+
+          token = os.environ.get('CHATWORK_API_TOKEN', '')
+          run_url = os.environ.get('RUN_URL', '')
+          if not token:
+              print('Chatwork token not set, skip notification')
+              exit()
+
+          msg = f"""【フォーエバーThreads自動投稿】エラーが発生しました\n\nログURL: {run_url}\n\nこのメッセージをそのままClaudeに投げると診断・修正してくれます。"""
+
+          data = urllib.parse.urlencode({'body': msg}).encode()
+          req = urllib.request.Request(
+              'https://api.chatwork.com/v2/rooms/229193178/messages',
+              data=data,
+              headers={'X-ChatworkToken': token}
+          )
+          urllib.request.urlopen(req)
+          print('エラー通知をChatworkに送信しました')
+          EOF
