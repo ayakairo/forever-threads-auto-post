@@ -2,8 +2,7 @@ name: フォーエバー Threads自動投稿
 
 on:
   schedule:
-    - cron: '0 3 * * *'    # 毎日 12:00 JST（昼）
-    - cron: '0 12 * * *'   # 毎日 21:00 JST（夜。日曜は長文の連投枠）
+    - cron: '0 12 * * *'   # 毎日 21:00 JST（1日1投稿。日曜は長文の連投枠）
   workflow_dispatch:        # 手動実行も可能
 
 permissions:
